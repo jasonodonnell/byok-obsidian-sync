@@ -1,6 +1,6 @@
 {
   "name": "byok-obsidian-sync",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Sync Bring Your Own Keyboard projects into an Obsidian vault when the device is plugged in.",
   "main": "main.js",
   "private": true,

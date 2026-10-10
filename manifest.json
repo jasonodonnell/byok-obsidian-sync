@@ -1,7 +1,7 @@
 {
   "id": "byok-sync",
   "name": "BYOK Sync",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.13.0",
   "description": "Sync projects from your Bring Your Own Keyboard writing device into your vault.",
   "author": "Jason O'Donnell",
