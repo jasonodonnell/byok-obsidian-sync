@@ -17,8 +17,6 @@ interface ByokSettings {
 	projects: string[];
 	/** Rewrite the device's space indentation using Obsidian's indent setting. */
 	convertIndent: boolean;
-	/** Number of spaces the device writes for one Tab press. */
-	deviceTabSize: number;
 }
 
 interface ByokData {
@@ -34,8 +32,10 @@ const DEFAULT_SETTINGS: ByokSettings = {
 	syncAllProjects: true,
 	projects: [],
 	convertIndent: true,
-	deviceTabSize: 5,
 };
+
+/** Number of spaces the BYOK writes for one Tab press. */
+const BYOK_TAB_SIZE = 5;
 
 interface SyncResult {
 	created: number;
@@ -212,18 +212,17 @@ export default class ByokSyncPlugin extends Plugin {
 	}
 
 	/**
-	 * The device saves each Tab as `deviceTabSize` spaces. Replace each full group of
+	 * The device saves each Tab as `BYOK_TAB_SIZE` spaces. Replace each full group of
 	 * leading spaces with one indent matching Obsidian's editor setting ("Indent using
 	 * tabs" / "Tab indent size"); leftover spaces that don't fill a group are kept.
 	 */
 	private convertIndent(text: string): string {
-		const size = this.settings.deviceTabSize;
-		if (!this.settings.convertIndent || size < 1) return text;
+		if (!this.settings.convertIndent) return text;
 		// getConfig is not in Obsidian's public typings but reads the editor settings.
 		const vault = this.app.vault as unknown as { getConfig?(key: string): unknown };
 		const useTab = vault.getConfig?.("useTab") !== false;
 		const indent = useTab ? "\t" : " ".repeat(Number(vault.getConfig?.("tabSize")) || 4);
-		return text.replace(/^ +/gm, (spaces) => indent.repeat(Math.floor(spaces.length / size)) + " ".repeat(spaces.length % size));
+		return text.replace(/^ +/gm, (spaces) => indent.repeat(Math.floor(spaces.length / BYOK_TAB_SIZE)) + " ".repeat(spaces.length % BYOK_TAB_SIZE));
 	}
 
 	private async ensureFolder(folderPath: string) {
@@ -316,19 +315,8 @@ class ByokSettingTab extends PluginSettingTab {
 			},
 			{
 				name: "Convert indentation",
-				desc: "The BYOK saves each tab as spaces. Convert them to match your editor's indentation settings.",
+				desc: "The BYOK saves each tab as 5 spaces. Convert them to match your editor's indentation settings.",
 				control: { type: "toggle", key: "convertIndent" },
-			},
-			{
-				name: "BYOK tab size",
-				desc: "Spaces the BYOK writes for one tab press.",
-				control: {
-					type: "number",
-					key: "deviceTabSize",
-					min: 1,
-					step: 1,
-					validate: (n) => (Number.isInteger(n) && n >= 1 ? undefined : "Enter a whole number of 1 or more."),
-				},
 			},
 			{
 				name: "Note extension",

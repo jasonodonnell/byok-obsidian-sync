@@ -24,8 +24,7 @@ The plugin only syncs when you ask it to. It doesn't watch for the device or syn
 | --- | --- |
 | Target folder | Vault folder that projects are synced into. Defaults to `BYOK`. |
 | Sync all projects | Turn off to pick which projects to sync. The list shows the projects found on your device. |
-| Convert indentation | The BYOK saves each tab as spaces. When on, leading spaces are converted to match your editor's indentation settings (**Settings → Editor → Indent using tabs** and **Tab indent size**). |
-| BYOK tab size | How many spaces the BYOK writes for one tab. Defaults to 5. |
+| Convert indentation | The BYOK saves each tab as 5 spaces. When on, leading spaces are converted to match your editor's indentation settings (**Settings → Editor → Indent using tabs** and **Tab indent size**). |
 | Note extension | Save documents as Markdown notes (`.md`) or plain text (`.txt`). |
 | Mount path override | Full path to the mounted device, if automatic detection doesn't find it. |
 
