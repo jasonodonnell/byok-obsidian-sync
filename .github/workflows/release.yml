@@ -33,12 +33,17 @@ jobs:
             main.js
             manifest.json
 
-      - name: Create release
+      - name: Publish release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" \
-            --title="$tag" \
-            --draft \
-            main.js manifest.json
+          # actions/checkout stores the tag as lightweight; fetch the annotated
+          # tag so its message can be used as the release notes.
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # A release was already created by hand; attach the assets to it.
+            gh release upload "$tag" main.js manifest.json --clobber
+          else
+            gh release create "$tag" --title="$tag" --verify-tag --notes-from-tag main.js manifest.json
+          fi

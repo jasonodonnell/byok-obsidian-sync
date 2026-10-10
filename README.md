@@ -61,13 +61,24 @@ Desktop only (macOS, Windows, Linux). The plugin uses Node.js file system APIs, 
 ## Development
 
 ```sh
-npm install
+make install    # install dependencies
 npm run dev     # watch and rebuild main.js
-npm run build   # type-check and build for production
-npm run lint
+make build      # type-check and build for production
+make lint
+make deploy VAULT="/path/to/vault"   # build and install into a vault
 ```
 
-To install a build into a vault, run `VAULT="/path/to/vault" npm run deploy`.
+### Releasing
+
+Write the release notes in a Markdown file, then run:
+
+```sh
+make release VERSION=1.0.1 NOTES=notes.md
+```
+
+This checks that `main` is clean and in sync with `origin/main`. It then sets the version in `manifest.json`, `versions.json`, and `package.json`, lints and builds, commits, and pushes `main` along with an annotated `1.0.1` tag containing the notes. Pushing the tag runs the release workflow, which builds the plugin and publishes the GitHub release with `main.js` and `manifest.json` attached. If you leave out `NOTES`, the release notes are just "Release 1.0.1".
+
+Don't create releases by hand on GitHub. If one already exists for the tag, the workflow attaches the files to it, but it doesn't update its notes.
 
 ## License
 
