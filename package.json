@@ -1,0 +1,23 @@
+{
+  "name": "byok-obsidian-sync",
+  "version": "1.0.0",
+  "description": "Sync Bring Your Own Keyboard projects into an Obsidian vault when the device is plugged in.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "deploy": "npm run build && mkdir -p \"$VAULT/.obsidian/plugins/byok-sync\" && cp main.js manifest.json \"$VAULT/.obsidian/plugins/byok-sync/\"",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-obsidianmd": "^0.4.2",
+    "obsidian": "^1.14.4",
+    "tslib": "^2.6.0",
+    "typescript": "^5.4.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "byok-sync",
+  "name": "BYOK Sync",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Detects your Bring Your Own Keyboard writing device when it is mounted in disk mode and syncs its projects into your vault.",
+  "author": "Jason O'Donnell",
+  "authorUrl": "https://github.com/jasonodonnell",
+  "isDesktopOnly": true
+}
