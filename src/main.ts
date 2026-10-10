@@ -277,7 +277,16 @@ class ByokSettingTab extends PluginSettingTab {
 				name: "Device status",
 				desc: !this.device ? "Looking for device…" : root ? `Connected at ${root}` : "Not connected",
 				render: (setting) => {
-					setting.addButton((b) => b.setButtonText("Sync now").setCta().onClick(() => this.plugin.syncNow()));
+					setting.addButton((b) =>
+						b
+							.setButtonText("Sync now")
+							.setCta()
+							.onClick(async () => {
+								await this.plugin.syncNow();
+								// The device may have been plugged in after the tab opened.
+								if (!this.looking) void this.lookForDevice();
+							}),
+					);
 					// Runs whenever the tab is shown, so the lookup only happens while settings are open.
 					if (!this.device && !this.looking) void this.lookForDevice();
 				},
