@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder, moment, normalizePath } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, SettingDefinitionItem, TFile, TFolder, normalizePath } from "obsidian";
 import { createHash } from "crypto";
 import { promises as fs } from "fs";
 import * as os from "os";
@@ -198,7 +198,9 @@ export default class ByokSyncPlugin extends Plugin {
 					result.updated++;
 				} else {
 					// Both sides changed (or the note predates the plugin): keep both.
-					const stamp = moment().format("YYYY-MM-DD HHmmss");
+					const d = new Date();
+					const pad = (n: number) => String(n).padStart(2, "0");
+					const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 					const conflictPath = normalizePath(`${projectFolder}/${base} (BYOK ${stamp}).${ext}`);
 					await this.app.vault.create(conflictPath, content);
 					this.synced[vaultPath] = deviceHash;
@@ -236,119 +238,115 @@ export default class ByokSyncPlugin extends Plugin {
 }
 
 class ByokSettingTab extends PluginSettingTab {
+	/** Result of the last device lookup; undefined until a lookup finishes. */
+	private device: { root: string | null; projects: string[] } | undefined;
+	private looking = false;
+
 	constructor(app: App, private plugin: ByokSyncPlugin) {
 		super(app, plugin);
 	}
 
-	display() {
-		const { containerEl } = this;
-		containerEl.empty();
-		const s = this.plugin.settings;
-
-		const status = new Setting(containerEl)
-			.setName("Device status")
-			.setDesc("Looking for device…")
-			.addButton((b) => b.setButtonText("Sync now").setCta().onClick(() => this.plugin.syncNow()));
-		// Block body on purpose: Setting has a then() method, so returning it from a
-		// promise callback makes the promise try to resolve it forever and freezes the app.
-		void this.plugin.findDevice().then((root) => {
-			status.setDesc(root ? `Connected at ${root}` : "Not connected");
-		});
-
-		new Setting(containerEl)
-			.setName("Target folder")
-			.setDesc("Vault folder that BYOK projects are synced into. Each project becomes a subfolder.")
-			.addText((t) =>
-				t.setPlaceholder("BYOK").setValue(s.targetFolder).onChange(async (v) => {
-					s.targetFolder = v.trim();
-					await this.plugin.save();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Sync all projects")
-			.setDesc("Turn off to choose which BYOK projects are synced.")
-			.addToggle((t) =>
-				t.setValue(s.syncAllProjects).onChange(async (v) => {
-					s.syncAllProjects = v;
-					await this.plugin.save();
-					this.display();
-				}),
-			);
-
-		if (!s.syncAllProjects) {
-			const projectsEl = containerEl.createDiv();
-			void this.renderProjects(projectsEl);
+	/** Look for the device in the background, then re-render with the result. */
+	private async lookForDevice() {
+		this.looking = true;
+		const root = await this.plugin.findDevice();
+		let projects: string[] = [];
+		try {
+			if (root) projects = await listProjects(root);
+		} catch {
+			// Device was unplugged mid-read.
 		}
-
-		new Setting(containerEl)
-			.setName("Convert indentation")
-			.setDesc("The BYOK saves each tab as spaces. Convert them to match your editor's indentation settings.")
-			.addToggle((t) =>
-				t.setValue(s.convertIndent).onChange(async (v) => {
-					s.convertIndent = v;
-					await this.plugin.save();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("BYOK tab size")
-			.setDesc("Spaces the BYOK writes for one tab press.")
-			.addText((t) =>
-				t.setValue(String(s.deviceTabSize)).onChange(async (v) => {
-					const n = Number(v);
-					if (!Number.isInteger(n) || n < 1) return;
-					s.deviceTabSize = n;
-					await this.plugin.save();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Note extension")
-			.setDesc("Save device .txt files as Markdown notes (.md) or keep them as .txt.")
-			.addDropdown((d) =>
-				d.addOption("md", ".md").addOption("txt", ".txt").setValue(s.extension).onChange(async (v) => {
-					s.extension = v as ByokSettings["extension"];
-					await this.plugin.save();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Mount path override")
-			.setDesc("Full path to the mounted BYOK. Leave empty to detect it automatically.")
-			.addText((t) =>
-				t.setValue(s.mountPath).onChange(async (v) => {
-					s.mountPath = v;
-					await this.plugin.save();
-				}),
-			);
+		this.device = { root, projects };
+		this.looking = false;
+		this.update();
 	}
 
-	private async renderProjects(el: HTMLElement) {
+	hide() {
+		// Look for the device again the next time the tab is opened.
+		this.device = undefined;
+		this.update();
+	}
+
+	getSettingDefinitions(): SettingDefinitionItem[] {
 		const s = this.plugin.settings;
-		const root = await this.plugin.findDevice();
-		let onDevice: string[] = [];
-		try {
-			if (root) onDevice = await listProjects(root);
-		} catch {
-			// Device was unplugged mid-read; fall back to the saved selection.
-		}
-		const names = [...new Set([...onDevice, ...s.projects])].sort((a, b) => a.localeCompare(b));
+		const root = this.device?.root ?? null;
+		const onDevice = this.device?.projects ?? [];
+		const projects = [...new Set([...onDevice, ...s.projects])].sort((a, b) => a.localeCompare(b));
 
-		el.empty();
-		if (!root) el.createEl("p", { cls: "setting-item-description", text: "Plug in your BYOK to see all of its projects." });
-		if (names.length === 0) return;
+		return [
+			{
+				name: "Device status",
+				desc: !this.device ? "Looking for device…" : root ? `Connected at ${root}` : "Not connected",
+				render: (setting) => {
+					setting.addButton((b) => b.setButtonText("Sync now").setCta().onClick(() => this.plugin.syncNow()));
+					// Runs whenever the tab is shown, so the lookup only happens while settings are open.
+					if (!this.device && !this.looking) void this.lookForDevice();
+				},
+			},
+			{
+				name: "Target folder",
+				desc: "Vault folder that BYOK projects are synced into. Each project becomes a subfolder.",
+				control: { type: "folder", key: "targetFolder", placeholder: "BYOK" },
+			},
+			{
+				name: "Sync all projects",
+				desc: "Turn off to choose which BYOK projects are synced.",
+				control: { type: "toggle", key: "syncAllProjects" },
+			},
+			{
+				type: "group",
+				heading: "Projects",
+				visible: () => !this.plugin.settings.syncAllProjects,
+				items: [
+					...(this.device && !root ? [{ name: "Plug in your BYOK to see all of its projects.", searchable: false }] : []),
+					...projects.map((name) => ({
+						name,
+						desc: root && !onDevice.includes(name) ? "Not found on device" : "",
+						searchable: false,
+						render: (setting: Setting) => {
+							setting.addToggle((t) =>
+								t.setValue(s.projects.includes(name)).onChange(async (v) => {
+									s.projects = v ? [...s.projects, name] : s.projects.filter((p) => p !== name);
+									await this.plugin.save();
+								}),
+							);
+						},
+					})),
+				],
+			},
+			{
+				name: "Convert indentation",
+				desc: "The BYOK saves each tab as spaces. Convert them to match your editor's indentation settings.",
+				control: { type: "toggle", key: "convertIndent" },
+			},
+			{
+				name: "BYOK tab size",
+				desc: "Spaces the BYOK writes for one tab press.",
+				control: {
+					type: "number",
+					key: "deviceTabSize",
+					min: 1,
+					step: 1,
+					validate: (n) => (Number.isInteger(n) && n >= 1 ? undefined : "Enter a whole number of 1 or more."),
+				},
+			},
+			{
+				name: "Note extension",
+				desc: "Save device .txt files as Markdown notes (.md) or keep them as .txt.",
+				control: { type: "dropdown", key: "extension", options: { md: ".md", txt: ".txt" } },
+			},
+			{
+				name: "Mount path override",
+				desc: "Full path to the mounted BYOK. Leave empty to detect it automatically.",
+				control: { type: "text", key: "mountPath" },
+			},
+		];
+	}
 
-		for (const name of names) {
-			new Setting(el)
-				.setName(name)
-				.setDesc(root && !onDevice.includes(name) ? "Not found on device" : "")
-				.addToggle((t) =>
-					t.setValue(s.projects.includes(name)).onChange(async (v) => {
-						s.projects = v ? [...s.projects, name] : s.projects.filter((p) => p !== name);
-						await this.plugin.save();
-					}),
-				);
-		}
+	/** The default saves only `settings`, which would drop the sync state stored next to it. */
+	async setControlValue(key: string, value: unknown) {
+		(this.plugin.settings as unknown as Record<string, unknown>)[key] = value;
+		await this.plugin.save();
+		if (key === "syncAllProjects") this.refreshDomState();
 	}
 }
