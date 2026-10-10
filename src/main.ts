@@ -212,9 +212,10 @@ export default class ByokSyncPlugin extends Plugin {
 	}
 
 	/**
-	 * The device saves each Tab as `BYOK_TAB_SIZE` spaces. Replace each full group of
-	 * leading spaces with one indent matching Obsidian's editor setting ("Indent using
-	 * tabs" / "Tab indent size"); leftover spaces that don't fill a group are kept.
+	 * The device saves each Tab as `BYOK_TAB_SIZE` spaces, which may be non-breaking
+	 * (U+00A0). Replace each full group of leading spaces with one indent matching
+	 * Obsidian's editor setting ("Indent using tabs" / "Tab indent size"); leftover
+	 * spaces that don't fill a group are kept.
 	 */
 	private convertIndent(text: string): string {
 		if (!this.settings.convertIndent) return text;
@@ -222,7 +223,7 @@ export default class ByokSyncPlugin extends Plugin {
 		const vault = this.app.vault as unknown as { getConfig?(key: string): unknown };
 		const useTab = vault.getConfig?.("useTab") !== false;
 		const indent = useTab ? "\t" : " ".repeat(Number(vault.getConfig?.("tabSize")) || 4);
-		return text.replace(/^ +/gm, (spaces) => indent.repeat(Math.floor(spaces.length / BYOK_TAB_SIZE)) + " ".repeat(spaces.length % BYOK_TAB_SIZE));
+		return text.replace(/^[ \u00a0]+/gm, (spaces) => indent.repeat(Math.floor(spaces.length / BYOK_TAB_SIZE)) + spaces.slice(spaces.length - (spaces.length % BYOK_TAB_SIZE)));
 	}
 
 	private async ensureFolder(folderPath: string) {
