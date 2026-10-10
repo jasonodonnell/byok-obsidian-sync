@@ -9,10 +9,6 @@ interface ByokSettings {
 	targetFolder: string;
 	/** Extension used for synced notes in the vault (device files are .txt). */
 	extension: "md" | "txt";
-	/** Sync automatically when the device is detected. */
-	autoSync: boolean;
-	/** How often to check whether the device is mounted. */
-	pollSeconds: number;
 	/** Explicit mount path; empty means auto-detect. */
 	mountPath: string;
 	/** Sync every project on the device; when false only `projects` are synced. */
@@ -34,8 +30,6 @@ interface ByokData {
 const DEFAULT_SETTINGS: ByokSettings = {
 	targetFolder: "BYOK",
 	extension: "md",
-	autoSync: true,
-	pollSeconds: 5,
 	mountPath: "",
 	syncAllProjects: true,
 	projects: [],
@@ -107,43 +101,20 @@ async function candidateMounts(): Promise<string[]> {
 export default class ByokSyncPlugin extends Plugin {
 	settings: ByokSettings = { ...DEFAULT_SETTINGS };
 	synced: Record<string, string> = {};
-	deviceRoot: string | null = null;
 	private syncing = false;
-	private polling = false;
-	private pollTimer: number | null = null;
-	private statusEl!: HTMLElement;
 
 	async onload() {
 		const data = (await this.loadData()) as Partial<ByokData> | null;
 		this.settings = { ...DEFAULT_SETTINGS, ...(data?.settings ?? {}) };
 		this.synced = data?.synced ?? {};
 
-		this.statusEl = this.addStatusBarItem();
-		this.updateStatus();
-
-		this.addRibbonIcon("keyboard", "Sync BYOK device", () => this.syncNow());
 		this.addCommand({ id: "sync-now", name: "Sync now", callback: () => this.syncNow() });
 		this.addSettingTab(new ByokSettingTab(this.app, this));
-
-		this.app.workspace.onLayoutReady(() => {
-			this.restartPolling();
-			void this.poll();
-		});
 	}
 
 	async save() {
 		const data: ByokData = { settings: this.settings, synced: this.synced };
 		await this.saveData(data);
-	}
-
-	restartPolling() {
-		if (this.pollTimer !== null) window.clearInterval(this.pollTimer);
-		const ms = Math.max(1, this.settings.pollSeconds) * 1000;
-		this.pollTimer = this.registerInterval(window.setInterval(() => void this.poll(), ms));
-	}
-
-	private updateStatus() {
-		this.statusEl.setText(this.syncing ? "BYOK: syncing…" : this.deviceRoot ? "BYOK: connected" : "");
 	}
 
 	async findDevice(): Promise<string | null> {
@@ -155,40 +126,15 @@ export default class ByokSyncPlugin extends Plugin {
 		return null;
 	}
 
-	private async poll() {
-		if (this.polling) return;
-		this.polling = true;
-		try {
-			const root = await this.findDevice();
-			if (root === this.deviceRoot) return;
-			const wasConnected = this.deviceRoot !== null;
-			this.deviceRoot = root;
-			this.updateStatus();
-			if (root) {
-				new Notice(`BYOK connected at ${root}`);
-				if (this.settings.autoSync) await this.sync(root);
-			} else if (wasConnected) {
-				new Notice("BYOK disconnected");
-			}
-		} finally {
-			this.polling = false;
-		}
-	}
-
 	async syncNow() {
-		const root = await this.findDevice();
-		if (!root) {
-			new Notice("BYOK device not found. Is it plugged in and in disk mode?");
-			return;
-		}
-		await this.sync(root);
-	}
-
-	async sync(root: string) {
 		if (this.syncing) return;
 		this.syncing = true;
-		this.updateStatus();
 		try {
+			const root = await this.findDevice();
+			if (!root) {
+				new Notice("BYOK device not found. Is it plugged in and in disk mode?");
+				return;
+			}
 			const r = await this.syncProjects(root);
 			await this.save();
 			const parts = [`${r.created} new`, `${r.updated} updated`];
@@ -199,7 +145,6 @@ export default class ByokSyncPlugin extends Plugin {
 			new Notice(`BYOK sync failed: ${e instanceof Error ? e.message : String(e)}`);
 		} finally {
 			this.syncing = false;
-			this.updateStatus();
 		}
 	}
 
@@ -300,10 +245,15 @@ class ByokSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		const s = this.plugin.settings;
 
-		new Setting(containerEl)
+		const status = new Setting(containerEl)
 			.setName("Device status")
-			.setDesc(this.plugin.deviceRoot ? `Connected at ${this.plugin.deviceRoot}` : "Not connected")
+			.setDesc("Looking for device…")
 			.addButton((b) => b.setButtonText("Sync now").setCta().onClick(() => this.plugin.syncNow()));
+		// Block body on purpose: Setting has a then() method, so returning it from a
+		// promise callback makes the promise try to resolve it forever and freezes the app.
+		void this.plugin.findDevice().then((root) => {
+			status.setDesc(root ? `Connected at ${root}` : "Not connected");
+		});
 
 		new Setting(containerEl)
 			.setName("Target folder")
@@ -364,29 +314,6 @@ class ByokSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Sync automatically")
-			.setDesc("Sync as soon as the device is detected.")
-			.addToggle((t) =>
-				t.setValue(s.autoSync).onChange(async (v) => {
-					s.autoSync = v;
-					await this.plugin.save();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Check interval (seconds)")
-			.setDesc("How often to look for the device.")
-			.addText((t) =>
-				t.setValue(String(s.pollSeconds)).onChange(async (v) => {
-					const n = Number(v);
-					if (!Number.isFinite(n) || n < 1) return;
-					s.pollSeconds = n;
-					await this.plugin.save();
-					this.plugin.restartPolling();
-				}),
-			);
-
-		new Setting(containerEl)
 			.setName("Mount path override")
 			.setDesc("Full path to the mounted BYOK. Leave empty to detect it automatically.")
 			.addText((t) =>
@@ -399,7 +326,7 @@ class ByokSettingTab extends PluginSettingTab {
 
 	private async renderProjects(el: HTMLElement) {
 		const s = this.plugin.settings;
-		const root = this.plugin.deviceRoot ?? (await this.plugin.findDevice());
+		const root = await this.plugin.findDevice();
 		let onDevice: string[] = [];
 		try {
 			if (root) onDevice = await listProjects(root);

@@ -1,8 +1,8 @@
 # BYOK Sync
 
-Sync writing from your [Bring Your Own Keyboard](https://byok.io/device) (BYOK) device into your Obsidian vault as soon as you plug it in.
+Sync writing from your [Bring Your Own Keyboard](https://byok.io/device) (BYOK) device into your Obsidian vault.
 
-When the BYOK is connected in disk mode, the plugin finds it automatically and copies each project's documents into a folder in your vault. Each project becomes a subfolder, and each document becomes a note.
+When you run a sync with the BYOK connected in disk mode, the plugin finds the device and copies each project's documents into a folder in your vault. Each project becomes a subfolder, and each document becomes a note.
 
 ```
 BYOK device                              Your vault
@@ -13,9 +13,10 @@ Projects/Foo/Bar.txt     ──▶             BYOK/Foo/Bar.md
 
 1. Install and enable **BYOK Sync**.
 2. Connect your BYOK to your computer and put it in disk mode.
-3. A notice confirms the device is connected, and your projects sync into the target folder (`BYOK` by default).
+3. Run **BYOK Sync: Sync now** from the command palette, or select **Sync now** in the plugin's settings.
+4. A notice shows how many notes were created or updated in the target folder (`BYOK` by default).
 
-You can also sync manually with the keyboard icon in the ribbon or the **BYOK Sync: Sync now** command. While the device is connected, the status bar shows **BYOK: connected**.
+The plugin only syncs when you ask it to. It doesn't watch for the device or sync on startup.
 
 ## Settings
 
@@ -26,8 +27,6 @@ You can also sync manually with the keyboard icon in the ribbon or the **BYOK Sy
 | Convert indentation | The BYOK saves each tab as spaces. When on, leading spaces are converted to match your editor's indentation settings (**Settings → Editor → Indent using tabs** and **Tab indent size**). |
 | BYOK tab size | How many spaces the BYOK writes for one tab. Defaults to 5. |
 | Note extension | Save documents as Markdown notes (`.md`) or plain text (`.txt`). |
-| Sync automatically | Sync as soon as the device is detected. |
-| Check interval | How often, in seconds, to look for the device. |
 | Mount path override | Full path to the mounted device, if automatic detection doesn't find it. |
 
 ## How syncing works
